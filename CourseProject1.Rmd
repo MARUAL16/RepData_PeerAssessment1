@@ -1,0 +1,162 @@
+#Course project 1
+
+
+## Introduction
+It is now possible to collect a large amount of data about personal movement using activity monitoring devices such as a Fitbit, Nike Fuelband, or Jawbone Up. These type of devices are part of the “quantified self” movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. But these data remain under-utilized both because the raw data are hard to obtain and there is a lack of statistical methods and software for processing and interpreting the data.
+
+This assignment makes use of data from a personal activity monitoring device. This device collects data at 5 minute intervals through out the day. The data consists of two months of data from an anonymous individual collected during the months of October and November, 2012 and include the number of steps taken in 5 minute intervals each day.
+
+The data for this assignment can be downloaded from the course web site:
+
+* Dataset: [Activity monitoring data](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip) 
+
+The variables included in this dataset are:
+
+steps: Number of steps taking in a 5-minute interval (missing values are coded as 𝙽𝙰) </br>
+date: The date on which the measurement was taken in YYYY-MM-DD format </br>
+interval: Identifier for the 5-minute interval in which measurement was taken </br>
+The dataset is stored in a comma-separated-value (CSV) file and there are a total of 17,568 observations in this dataset. 
+
+## Loading and preprocessing the data
+Unzip data to obtain a csv file.
+
+```{r}
+library("data.table")
+library(ggplot2)
+
+fileUrl <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip"
+download.file(fileUrl, destfile = "Project1Course5.zip")
+unzip("Project1Course5.zip",exdir = "data")
+```
+
+##1. Reading Data and preprocessing the data
+```{r}
+activityDT <- read.csv("data/activity.csv",sep=",",header=T)
+activityDT$steps <- as.numeric(activityDT$steps)
+activityDT$interval <- as.numeric(activityDT$interval)
+```
+
+
+##2. Histogramam of the total number of steps taken per day
+
+```{r echo=TRUE}
+
+Total_steps<- aggregate(steps ~ date, activityDT, sum)
+library(ggplot2)
+ggplot(Total_steps, aes(x = steps)) +
+    geom_histogram(fill = "orange", binwidth = 3000) +
+    labs(title = "Daily Steps", x = "Steps", y = "Frequency")
+```
+
+
+##3. Mean and median of the total number of steps taken per day
+```{r echo=TRUE}
+mean(Total_steps$steps)
+median(Total_steps$steps)
+```
+
+The mean is 10766.2 and the median 10765
+
+##4. Plot of the average number of steps taken
+
+
+```{r echo=TRUE}
+
+Total_steps_5min <- aggregate(steps ~ interval, activityDT, mean)
+with(Total_steps_5min, plot(interval, steps, type="l",main = "Mean of steps per interval"))
+```
+
+###5. Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?
+
+```{r echo=TRUE}
+Interval_max_steps<- Total_steps_5min[Total_steps_5min$steps==max(Total_steps_5min$steps),"interval"]
+```
+
+The interval which contain the maximum number of step is 835
+
+###6. Code to describe and show a strategy for imputing missing data
+
+####6.1 Number of missing values
+
+```{r echo=TRUE}
+mean(is.na(activityDT$steps))
+sum(is.na(activityDT$steps))
+```
+
+The mean of missing value is of the 13.1%, whereas the total of interval without data is of 2304
+
+####6.2 Devise a strategy for filling in all of the missing values in the dataset. 
+The strategy does not need to be sophisticated. For example, you could use the mean/median for that day, or the mean for that 5-minute interval, etc. In this project the filling in of  missing values will be done  with mean of steps in each interval. First of all, it will be reformated the values of the column "interval". The new values will be assigned to a new column called interval_ref. Furthemore,  will be transformed the format of the column interval in the dataframe that contain the mean of the steps each 5 minute interval
+
+```{r echo=TRUE}
+
+activityDT$interval_ref <- ifelse(activityDT$interval <100,as.numeric(activityDT$interval/60),0)
+activityDT$interval_ref <- ifelse((activityDT$interval >=100 & activityDT$interval < 1000),as.numeric(substr(activityDT$interval,1,1))+as.numeric(substr(activityDT$interval,2,3))/60,activityDT$interval_ref)
+activityDT$interval_ref <- ifelse((activityDT$interval >=1000 & activityDT$interval < 10000),as.numeric(substr(activityDT$interval,1,2))+as.numeric(substr(activityDT$interval,3,4))/60,activityDT$interval_ref)
+
+Total_steps_5min$interval_ref <- seq(from=0, to=23.91666667, by=5/60)
+
+Data_filling <- data.frame()
+
+for (interval in seq(from=0, to=23.91666667, by=5/60)){
+  
+  ACTIVITY_INTERVAL <- activityDT[activityDT$interval_ref==interval,]
+  
+  ACTIVITY_INTERVAL$steps <- ifelse(is.na(ACTIVITY_INTERVAL$steps)==TRUE, Total_steps_5min[Total_steps_5min$interval==interval,"steps"],ACTIVITY_INTERVAL$steps)
+                                
+  Data_filling <- rbind(Data_filling, ACTIVITY_INTERVAL)                     
+  rm(ACTIVITY_INTERVAL)
+}
+
+
+```
+
+##7. Histogram of the total number of steps taken each day after missing values are imputed
+
+
+
+```{r echo=TRUE}
+Total_steps<- aggregate(steps ~ date, Data_filling, sum)
+ggplot(Total_steps, aes(x = steps)) +
+    geom_histogram(fill = "red", binwidth = 2000) +
+    labs(title = "Daily Steps after the reconstruction of the values", x = "Steps", y = "Frequency")
+```
+
+###7.1 Mean and median total of number of steps taken per day
+
+```{r echo=TRUE}
+mean(Total_steps$steps)
+median(Total_steps$steps)
+```
+
+Type of Estimate | Mean_Steps | Median_Steps
+--- | --- | ---
+First Part (with na) | 10766.2 | 10765
+Second Part (fillin in na with median) |6256.8 |6826
+
+After of the reconstruction of the NA values, the mean of the steps has decreased a 42 %, whereas the median has decrease a 36.5% 
+
+##8. Are there differences in activity patterns between weekdays and weekends?
+
+####8.1. Create a new factor variable in the dataset with two levels – “weekday” and “weekend” indicating whether a given date is a weekday or weekend day.
+
+```{r echo=TRUE}
+Data_filling$date <- as.Date(Data_filling$date)
+Data_filling$dayofweek <- weekdays(Data_filling$date)
+Data_filling_weekdays <- Data_filling[Data_filling$dayofweek!="sábado" & Data_filling$dayofweek!="domingo",]
+Data_filling_weekend <- Data_filling[Data_filling$dayofweek=="sábado" | Data_filling$dayofweek=="domingo",]
+```
+
+
+####8.2. Panel plot comparing the average number of steps taken per 5-minute interval across weekdays and weekends
+
+
+```{r echo=TRUE}
+par(mfrow = c(1, 2))
+{
+with(Data_filling_weekdays, plot(interval, steps, main = "Weekdays",type = "l",col="red"))
+with(Data_filling_weekend, plot(interval,steps, main = "Weekends",type = "l",col="blue"))
+}
+```
+
+As can be see in the previous figure there are some differents in the pattern between weekdays and weekends. For example,the maximum of steps in the weekends it's registered in the evenings, whereas in the weekdays it's registered in the mornings
